@@ -14,7 +14,7 @@ from decimal import Decimal, ROUND_UP
 # subprocess.run(["python", "Data_processing.py"])
 
 # 運行權重計算
-# subprocess.run(["python", "Kriging.py"])
+#　subprocess.run(["python", "Kriging.py"])
 
 # 讀取第一個程式生成的處理後檔案路徑
 with open("processed_files.xlsx", "r") as f:
@@ -96,7 +96,7 @@ data_2 = pd.read_excel(processed_files[1])
 # 定義鑽孔位置
 borehole_position_1 = data['positions_1']
 borehole_position_2 = data['positions_2']
-# predict_borehole_position = data['prediction_position']
+predict_borehole_position = data['prediction_position']
 
 weight_1 = data['weight_1']
 weight_2 = data['weight_2']
@@ -305,6 +305,7 @@ for depth_range in depth_ranges:
 
         
         elif not flag:
+            # 非第一筆資料
             if idx != 0:
                 layers.append({
                     "upper_depth_major": (major_position, upper_depth_major[idx]),
@@ -372,7 +373,7 @@ for depth_range in depth_ranges:
                     data.append(row)
                     
                 matched_layers_major.add(idx)
-
+            # 第一筆資料
             else:
                 # 當主鑽孔第一筆資料的upper_depth_1小於副鑽孔第一筆資料的upper_depth_2
                 if upper_depth_minor[idx] < upper_depth_major[0]:
@@ -648,6 +649,78 @@ for depth_range in depth_ranges:
                         data.append(row)
                         
                     matched_layers_minor.add(idx)
+                
+                # 當主鑽孔的upper_depth_1等於副鑽孔的upper_depth_2
+                elif upper_depth_minor[idx] == upper_depth_major[0]:
+                    print('主鑽孔的upper_depth_1等於副鑽孔的upper_depth_2')
+                    layers.append({
+                        "upper_depth_major": (major_position, upper_depth_major[0]),
+                        "lower_depth_major": (major_position, lower_depth_major[0]),
+                        "upper_depth_minor": (minor_position, upper_depth_minor[idx]),
+                        "lower_depth_minor": (minor_position, upper_depth_minor[idx]),
+                        "label": soil_type_major[0],
+                        "color": color_mapping[str(int(soil_type_major[0]))],
+                        "soil_type": soil_type_major[0],
+                    })
+                    # 預測predict_borehole_data的數據
+                    # 取用layers的數據
+                    upper_limit = upper_depth_major[0] * weight_1 + upper_depth_minor[idx] * weight_2
+                    lower_limit = lower_depth_major[0] * weight_1 + upper_depth_minor[idx] * weight_2
+                    upper_limit = round(upper_limit, 2)
+                    lower_limit = round(lower_limit, 2)
+                    print(upper_limit, lower_limit)
+                    depth = upper_limit
+                    if depth - last_depth >= 0.02:
+                        print('不改變深度', depth)
+                    else:
+                        depth = depth + 0.01
+                    data_major = major_data[(major_data['Test length[1]'] >= upper_limit) & (major_data['Test length[1]'] <= lower_limit)]
+                    data_minor = minor_data[(minor_data['Test length[1]'] >= upper_limit) & (minor_data['Test length[1]'] <= lower_limit)]
+                    # 初始化變數
+                    x = 0
+
+                    # 遍歷深度範圍
+                    while depth < lower_limit:
+                        print(f"Processing depth: {depth}, x: {x}, lower_limit: {lower_limit}")
+                        
+                        # 檢查索引是否越界
+                        row_major = data_major.iloc[x] if x < len(data_major) else None
+                        row_minor = data_minor.iloc[x] if x < len(data_minor) else None
+
+                        # 判斷是否有數據可用
+                        if row_major is None and row_minor is None:
+                            print("No more data available.")
+                            break
+
+                        # 根據情況進行數據處理
+                        if row_major is not None and row_minor is not None:
+                            row = {
+                                'Test length[1]': depth,
+                                'Cone resistance[2]': (row_major.iloc[1] * weight_1 + row_minor.iloc[1] * weight_2),
+                                'Local friction[3]': (row_major.iloc[2] * weight_1 + row_minor.iloc[2] * weight_2),
+                                'Pore pressure u2[6]': (row_major.iloc[3] * weight_1 + row_minor.iloc[3] * weight_2),
+                            }
+                        elif row_major is not None:
+                            row = {
+                                'Test length[1]': depth,
+                                'Cone resistance[2]': row_major.iloc[1],
+                                'Local friction[3]': row_major.iloc[2],
+                                'Pore pressure u2[6]': row_major.iloc[3],
+                            }
+                        elif row_minor is not None:
+                            row = {
+                                'Test length[1]': depth,
+                                'Cone resistance[2]': row_minor.iloc[1],
+                                'Local friction[3]': row_minor.iloc[2],
+                                'Pore pressure u2[6]': row_minor.iloc[3],
+                            }
+                        
+                        # 更新深度和索引
+                        x += 1
+                        last_depth = depth
+                        depth += 0.01  # 確保深度增加，避免死循環
+
+                        
 
         for i in include:
             print('include', i)
@@ -815,6 +888,10 @@ predict_borehole['Lower Depth'] = (
 # 儲存預測的鑽孔位置
 predict_borehole.to_excel('predict_borehole.xlsx', index=False)
 
+# 把predict_borehole_data的數據根據upper_depth進行排列
+predict_borehole_data = predict_borehole_data.sort_values(by='Test length[1]', ascending=True)
+
+
 # 儲存預測的鑽孔資料
 predict_borehole_data.to_excel('predict_borehole_data.xlsx', index=False)
 
@@ -849,7 +926,7 @@ for layer in layers:
 # 添加鑽孔位置線
 ax.axvline(x=borehole_position_1, color='black', linestyle='--', linewidth=1, label='Borehole 1')
 ax.axvline(x=borehole_position_2, color='black', linestyle='--', linewidth=1, label='Borehole 2')
-# ax.axvline(x=predict_borehole_position, color='black', linestyle='--', linewidth=1, label='Borehole 2')
+ax.axvline(x=predict_borehole_position, color='black', linestyle='--', linewidth=1, label='Borehole 2')
 
 
 # 設置圖例

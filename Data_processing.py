@@ -131,20 +131,20 @@ def process_file(file, thickness_threshold):
 
     # 資料處理
     # 把Ic轉為float
-    df_copy['I_c'] = df_copy['I_c'].replace(' ', 0).astype(float)
-    df_copy['I_c'] = df_copy['I_c'].interpolate(method='linear')
+    df_copy['I_c 填補'] = df_copy['I_c 填補'].replace(' ', 0).astype(float)
+    df_copy['I_c 填補'] = df_copy['I_c 填補'].interpolate(method='linear')
     df_copy['Soil Type'] = df_copy['Soil Type'].ffill()
 
     # 分類土壤類型
-    Soil_Type_5 = df_copy['I_c'].apply(classify_soil_type)
+    Soil_Type_5 = df_copy['I_c 填補'].apply(classify_soil_type)
     df_copy['Soil Type 5 type'] = Soil_Type_5
     df_copy['Mark1'] = ''
 
     # 計算層數、厚度和 Ic 平均值
-    layers, thicknesses, ic_avgs = data_array(Soil_Type_5, df_copy['I_c'])
+    layers, thicknesses, ic_avgs = data_array(Soil_Type_5, df_copy['I_c 填補'])
     result_df = pd.DataFrame({'Soil Type': layers, 'Thickness': thicknesses, 'Ic_avg': ic_avgs})
 
-    # 第一次合併（合併厚度 <= 5cm）
+    # 第一次合併（合併厚度 <= 5cm）100
     result_array1 = merge_layer(result_df, 5)
 
     # 寫入第一次處理後的數據
