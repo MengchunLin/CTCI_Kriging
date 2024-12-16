@@ -14,7 +14,7 @@ from decimal import Decimal, ROUND_UP
 # subprocess.run(["python", "Data_processing.py"])
 
 # 運行權重計算
-#　subprocess.run(["python", "Kriging.py"])
+# subprocess.run(["python", "Kriging.py"])
 
 # 讀取第一個程式生成的處理後檔案路徑
 with open("processed_files.xlsx", "r") as f:
@@ -100,6 +100,10 @@ predict_borehole_position = data['prediction_position']
 
 weight_1 = data['weight_1']
 weight_2 = data['weight_2']
+
+borehole_name_1 = data['file1']
+borehole_name_2 = data['file2']
+borehole_predict_name = data['prediction']
 
 # 定義顏色映射
 color_mapping = {
@@ -193,6 +197,10 @@ for depth_range in depth_ranges:
     # 選出較短的文件
     major_section = section_df_1 if len_1 < len_2 else section_df_2
     minor_section = section_df_2 if len_1 < len_2 else section_df_1
+    #　如果文件等長，則選擇第一個文件為主文件
+    major_section = section_df_1 if len_1 == len_2 else major_section
+    minor_section = section_df_2 if len_1 == len_2 else minor_section
+    major_position = borehole_position_1 if len_1 < len_2 else borehole_position_2
     major_position = borehole_position_1 if len_1 < len_2 else borehole_position_2
     minor_position = borehole_position_2 if len_1 < len_2 else borehole_position_1
     major_data = data_1 if len_1 < len_2 else data_2
@@ -719,7 +727,42 @@ for depth_range in depth_ranges:
                         x += 1
                         last_depth = depth
                         depth += 0.01  # 確保深度增加，避免死循環
+                # 當主鑽孔的upper_depth_1第一筆資料未匹配的土層
+                elif major_section[0] not in matched_layers_major:
+                    print('主鑽孔的upper_depth_1第一筆資料未匹配的土層')
+                    layers.append({
+                        "upper_depth_major": (major_position, upper_depth_major[0]),
+                        "lower_depth_major": (major_position, lower_depth_major[0]),
+                        "upper_depth_minor": (minor_position, lower_depth_minor[idx]),
+                        "lower_depth_minor": (minor_position, lower_depth_minor[idx]),
+                        "label": soil_type_minor[idx],
+                        "color": color_mapping[str(int(soil_type_minor[idx]))],
+                        "soil_type": soil_type_minor[idx],
+                    })
+                    # 預測predict_borehole_data的數據
+                    # 取用layers的數據
+                    upper_limit = upper_depth_major[0] * weight_1 + lower_depth_minor[idx] * weight_2
+                    lower_limit = lower_depth_major[0] * weight_1 + lower_depth_minor[idx] * weight_2
+                    upper_limit = round(upper_limit, 2)
+                    lower_limit = round(lower_limit, 2)
+                    print(upper_limit, lower_limit)
+                    depth = upper_limit
+                    if depth - last_depth >= 0.02:
+                        print('不改變深度', depth)
+                    else:
+                        depth = depth + 0.01
+                    data_major = major_data[(major_data['Test length[1]'] >= upper_limit) & (major_data['Test length[1]'] <= lower_limit)]
+                    data_minor = minor_data[(minor_data['Test length[1]'] >= upper_limit) & (minor_data['Test length[1]'] <= lower_limit)]
+                    # 初始化變數
+                    x = 0
 
+                    # 遍歷深度範圍
+                    while depth < lower_limit:
+                        # 先檢查索引 x 是否在 data_major 和 data_minor 範圍內
+                        row_major = data_major.iloc[x] if x < len(data_major) else None
+                        row_minor = data_minor.iloc[x] if x < len(data_minor) else None
+
+                        # 判斷 row_major 和 row_minor 是否有數據，並計算合併或單
                         
 
         for i in include:
@@ -791,6 +834,7 @@ for depth_range in depth_ranges:
     # 匹配剩下的
     for i in range(len(minor_section)):
         if i not in matched_layers_minor:
+            print('剩下的', i)
             layers.append({
                 "upper_depth_major": (major_position, lower_depth_major[idx]),
                 "lower_depth_major": (major_position, lower_depth_major[idx]),
@@ -856,6 +900,44 @@ for depth_range in depth_ranges:
                 data.append(row)
                 
             matched_layers_minor.add(idx)
+        # 匹配剩下的MAJOR
+    for i in range(len(major_section)):
+        if i not in matched_layers_major:
+            print('剩下的MAJOR', i)
+            layers.append({
+                "upper_depth_major": (major_position, upper_depth_major[i]),
+                "lower_depth_major": (major_position, lower_depth_major[i]),
+                "upper_depth_minor": (minor_position, lower_depth_minor[0]),
+                "lower_depth_minor": (minor_position, upper_depth_minor[0]),
+                "label": soil_type_major[i],
+                "color": color_mapping[str(int(soil_type_minor[0]))],
+                "soil_type": soil_type_major[i],
+            })
+            # 預測predict_borehole_data的數據
+            # 取用layers的數據
+            upper_limit = upper_depth_major[i] * weight_1 + lower_depth_minor[0] * weight_2
+            lower_limit = lower_depth_major[i] * weight_1 + upper_depth_minor[0] * weight_2
+            upper_limit = round(upper_limit, 2)
+            lower_limit = round(lower_limit, 2)
+            print(upper_limit, lower_limit)
+            depth = upper_limit
+            if depth - last_depth >= 0.02:
+                print('不改變深度', depth)
+            else:
+                depth = depth + 0.01
+            # 選取data_1和data_2在範圍upper_depth_major、upper_depth_minor、lower_depth_major和lower_depth_minor之間的數據
+            # 使用layers的數據
+            data_major = major_data[(major_data['Test length[1]'] >= upper_limit) & (major_data['Test length[1]'] <= lower_limit)]
+            data_minor = minor_data[(minor_data['Test length[1]'] >= upper_limit) & (minor_data['Test length[1]'] <= lower_limit)]
+            # 初始化變數
+            x = 0
+
+            # 遍歷深度範圍
+            while depth < lower_limit:
+                # 先檢查索引 x 是否在 data_major 和 data_minor 範圍內
+                row_major = data_major.iloc[x] if x < len(data_major) else None
+                row_minor = data_minor.iloc[x] if x < len(data_minor) else None
+                
     # 最後一次性轉換為 DataFrame
     predict_borehole_data = pd.DataFrame(data)
 # 把predict_borehole_data的順序改為Depth (m)由小到大
@@ -927,6 +1009,11 @@ for layer in layers:
 ax.axvline(x=borehole_position_1, color='black', linestyle='--', linewidth=1, label='Borehole 1')
 ax.axvline(x=borehole_position_2, color='black', linestyle='--', linewidth=1, label='Borehole 2')
 ax.axvline(x=predict_borehole_position, color='black', linestyle='--', linewidth=1, label='Borehole 2')
+
+# 標記鑽孔名稱 
+ax.text(borehole_position_1, 100, borehole_name_1, fontsize=12, ha='center')
+ax.text(borehole_position_2, 100, borehole_name_2, fontsize=12, ha='center')
+ax.text(predict_borehole_position, 100, borehole_predict_name, fontsize=12, ha='center')
 
 
 # 設置圖例

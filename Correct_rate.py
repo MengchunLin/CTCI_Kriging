@@ -1,5 +1,6 @@
 import pandas as pd
 from tkinter import Tk, filedialog
+original_soil_type = []
 
 def fill_missing_values_in_soil_type(file_path):
     # 讀取第一個檔案
@@ -7,8 +8,8 @@ def fill_missing_values_in_soil_type(file_path):
     
     # 填補 Soil Type 欄位的缺值
     # 線性插值
-    if 'Soil Type' in df.columns:
-        df['Soil Type'].interpolate(method='linear', inplace=True)
+    if '合併後' in df.columns:
+        df['合併後'].interpolate(method='linear', inplace=True)
         print("已填補 Soil Type 欄位的缺值。")
     else:
         print("未找到 Soil Type 欄位。")
@@ -44,12 +45,16 @@ def round_depth_columns(file_path):
     return type_list
 
 # 對比兩個檔案的差異
+
 def compare_files(original_soil_type, type_list):
     difference = 0
-    for i in range(len(original_soil_type)):
+    start = 2000
+    end = 3000
+    total = end - start
+    for i in range(start, end):
         if original_soil_type[i] != type_list[i]:
             difference += 1
-    correct_rate = (len(original_soil_type) - difference) / len(original_soil_type)
+    correct_rate = (total - difference) / total
     return correct_rate
 
 
